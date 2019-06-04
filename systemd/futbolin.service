@@ -1,0 +1,13 @@
+
+[Unit]
+Description=Futbolin-Slackbot
+After=multi-user.target
+
+[Service]
+Type=idle
+WorkingDirectory=/opt/futbolin-slackbot
+ExecStart=/opt/futbolin-slackbot/venv/bin/python app.py
+ExecReload=/bin/kill -SIGUSR1 $MAINPID
+
+[Install]
+WantedBy=multi-user.target
