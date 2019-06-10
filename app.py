@@ -55,7 +55,11 @@ def handle_events(slack_events):
     for event in slack_events:
 
         if event["type"] == "message" and "subtype" not in event:
-            print(event["user"] + ":" + event["text"])
+            try:
+                print(event["user"] + ":" + event["text"])
+            except UnicodeEncodeError:
+                print(event["user"] + ": ... not printable unicode char included ...")
+
             matches = re.search(QUEUE_COUPLE_REGEX, event["text"])
 
             player_one = slack_client.api_call("users.info", user=matches.group(1))
