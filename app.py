@@ -53,8 +53,8 @@ client.loop_start()
 
 def handle_events(slack_events):
     for event in slack_events:
-
         if event["type"] == "message" and "subtype" not in event:
+
             try:
                 print(event["user"] + ":" + event["text"])
             except UnicodeEncodeError:
@@ -62,25 +62,21 @@ def handle_events(slack_events):
 
             matches = re.search(QUEUE_COUPLE_REGEX, event["text"])
 
-            player_one = slack_client.api_call("users.info", user=matches.group(1))
-            player_two = slack_client.api_call("users.info", user=matches.group(2))
+            if matches:
+                player_one = slack_client.api_call("users.info", user=matches.group(1))
+                player_two = slack_client.api_call("users.info", user=matches.group(2))
 
-            print(player_one['user']['is_bot'])
-            print(player_two['user']['is_bot'])
+                if event["user"] not in (matches.group(1), matches.group(2)):
+                    slack_client.api_call("chat.postMessage", channel=event["channel"],
+                                          text="You have to be part of the couple!")
+                elif matches.group(1) == matches.group(2):
+                    slack_client.api_call("chat.postMessage", channel=event["channel"],
+                                          text="You cannot clone yourself to build a couple!")
 
-            if matches and (matches.group(1) == matches.group(2)):
-                slack_client.api_call("chat.postMessage", channel=event["channel"],
-                                      text="You cannot clone yourself to build a couple!")
-
-            elif event["user"] not in (matches.group(1), matches.group(2)):
-                slack_client.api_call("chat.postMessage", channel=event["channel"],
-                                      text="You have to be part of the couple!")
-
-            elif player_one['user']['is_bot'] or player_two['user']['is_bot']:
-                slack_client.api_call("chat.postMessage", channel=event["channel"],
-                                      text="You cannot play with a bot, stupid!")
-            else:
-                if matches and (matches.group(1) != matches.group(2)):
+                elif player_one['user']['is_bot'] or player_two['user']['is_bot']:
+                    slack_client.api_call("chat.postMessage", channel=event["channel"],
+                                          text="You cannot play with a bot, stupid!")
+                else:
                     client.publish(config.get('mqtt.topic'), "+" + player_one['user']['profile']['real_name'] +
                                    "/" + player_two['user']['profile']['real_name'])
                     slack_client.api_call("chat.postMessage", channel=event["channel"],
