@@ -18,7 +18,7 @@ slack_client = SlackClient(config.get('slackbot.token'))
 # 1 second delay between reading from RTM
 RTM_READ_DELAY = 1
 QUEUE_COUPLE_REGEX = '^\+.*<@(|[WU].+?)>.*<@(|[WU].+?)>.*'
-DEQUE_COUPLE_REGEX = '^\-.*<@(|[WU].+?)>.*<@(|[WU].+?)>.*'
+DEQUE_COUPLE_REGEX = '^-.*<@(|[WU].+?)>.*<@(|[WU].+?)>.*'
 
 
 # def on_message(client, userdata, message):
@@ -60,8 +60,8 @@ def handle_events(slack_events):
             except UnicodeEncodeError:
                 print(event["user"] + ": ... not printable unicode char included ...")
 
+            # QUEUE COUPLE
             matches = re.search(QUEUE_COUPLE_REGEX, event["text"])
-
             if matches:
                 player_one = slack_client.api_call("users.info", user=matches.group(1))
                 player_two = slack_client.api_call("users.info", user=matches.group(2))
@@ -79,9 +79,36 @@ def handle_events(slack_events):
                 else:
                     client.publish(config.get('mqtt.topic'), "+" + player_one['user']['profile']['real_name'] +
                                    "/" + player_two['user']['profile']['real_name'])
+#                    slack_client.api_call("chat.postMessage", channel=event["channel"],
+#                                          text="Added " + player_one['user']['profile']['real_name'] + " & " +
+#                                               player_two['user']['profile']['real_name'] + " to the queue.")
+
+            # DEQUEUE COUPLE
+            matches = re.search(DEQUE_COUPLE_REGEX, event["text"])
+            if matches:
+                player_one = slack_client.api_call("users.info", user=matches.group(1))
+                player_two = slack_client.api_call("users.info", user=matches.group(2))
+
+                if event["user"] not in (matches.group(1), matches.group(2)):
                     slack_client.api_call("chat.postMessage", channel=event["channel"],
-                                          text="Added " + player_one['user']['profile']['real_name'] + " & " +
-                                               player_two['user']['profile']['real_name'] + " to the queue.")
+                                          text="You cannot unqueue a foreign couple!")
+                elif matches.group(1) == matches.group(2) or player_one['user']['is_bot'] or player_two['user']['is_bot']:
+                    slack_client.api_call("chat.postMessage", channel=event["channel"],
+                                          text="Never ever would have accepted that to be queued!")
+                else:
+                    client.publish(config.get('mqtt.topic'), "-" + player_one['user']['profile']['real_name'] +
+                                   "/" + player_two['user']['profile']['real_name'])
+#                slack_client.api_call("chat.postMessage", channel=event["channel"],
+#                                      text="Added " + player_one['user']['profile']['real_name'] + " & " +
+#                                           player_two['user']['profile']['real_name'] + " to the queue.")
+
+            # REQUEST QUEUE
+            if event["text"] == '?q':
+                client.publish(config.get('mqtt.topic'), "q")
+
+            # REQUEST STATISTIC
+            if event["text"] == '?s':
+                client.publish(config.get('mqtt.topic'), "s")
 
 
 if __name__ == "__main__":
