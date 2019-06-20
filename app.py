@@ -21,24 +21,64 @@ QUEUE_COUPLE_REGEX = '^\+.*<@(|[WU].+?)>.*<@(|[WU].+?)>.*'
 DEQUE_COUPLE_REGEX = '^-.*<@(|[WU].+?)>.*<@(|[WU].+?)>.*'
 
 
-# def on_message(client, userdata, message):
-#   print("received message =", str(message.payload.decode("utf-8")))
+def on_message(client, userdata, message):
+    #print("received message =", message.payload)
+
+    if message.payload.startswith('++'):
+        print("MQTT: Queued confirmation response.")
+        channels = slack_client.api_call('channels.list', exclude_archived=True, exclude_members=True).get('channels')
+        for channel in channels:
+            if channel.get('is_member'):
+                # print(channel.get('id'), channel.get('name_normalized'))
+                # slack_client.api_call("chat.postMessage", channel='CFZA33VSB',
+                slack_client.api_call("chat.postMessage", channel=channel.get('id'),
+                                      text="Added " + message.payload[2:] + " to the futbolin queue.")
+
+    if message.payload.startswith('--'):
+        print("MQTT: Dequeued confirmation response.")
+        channels = slack_client.api_call('channels.list', exclude_archived=True, exclude_members=True).get('channels')
+        for channel in channels:
+            if channel.get('is_member'):
+                # slack_client.api_call("chat.postMessage", channel='CFZA33VSB',
+                slack_client.api_call("chat.postMessage", channel=channel.get('id'),
+                                      text="Removed " + message.payload[2:] + " from the futbolin queue.")
+
+    if message.payload == 'qq':
+        print("MQTT: Queue list response.")
+        channels = slack_client.api_call('channels.list', exclude_archived=True, exclude_members=True).get('channels')
+        for channel in channels:
+            if channel.get('is_member'):
+                # slack_client.api_call("chat.postMessage", channel='CFZA33VSB',
+                slack_client.api_call("chat.postMessage", channel=channel.get('id'),
+                                      text="List current queue not implemented yet")
+
+    if message.payload == 'ss':
+        print("MQTT: Statistic response.")
+        channels = slack_client.api_call('channels.list', exclude_archived=True, exclude_members=True).get('channels')
+        for channel in channels:
+            if channel.get('is_member'):
+                # slack_client.api_call("chat.postMessage", channel='CFZA33VSB',
+                slack_client.api_call("chat.postMessage", channel=channel.get('id'),
+                                      text="Show statistic not implemented yet")
 
 
 # def on_log(client, userdata, level, buf):
-#   print("log: ",buf)
+#     print("log: ",buf)
 
 
-# def on_connect(client, userdata, flags, rc):
-#   print("connected ")
+def on_connect(client, userdata, flags, rc):
+    print("MQTT: connected ")
+    client.subscribe(config.get('mqtt.topic'))
 
 
 client = paho.Client()
 
-# client.on_message=on_message
-client.on_message = lambda *args: None
+client.on_message=on_message
+# client.on_log = on_log
+client.on_connect = on_connect
+# client.on_message = lambda *args: None
 client.on_log = lambda *args: None
-client.on_connect = lambda *args: None
+# client.on_connect = lambda *args: None
 
 if config.get('mqtt.secure'):
     client.tls_set_context(context=None)
@@ -55,14 +95,10 @@ def handle_events(slack_events):
     for event in slack_events:
         if event["type"] == "message" and "subtype" not in event:
 
-            try:
-                print(event["user"] + ":" + event["text"])
-            except UnicodeEncodeError:
-                print(event["user"] + ": ... not printable unicode char included ...")
-
             # QUEUE COUPLE
             matches = re.search(QUEUE_COUPLE_REGEX, event["text"])
             if matches:
+                print("SLACK: Queue request from " + event["user"])
                 player_one = slack_client.api_call("users.info", user=matches.group(1))
                 player_two = slack_client.api_call("users.info", user=matches.group(2))
 
@@ -79,13 +115,12 @@ def handle_events(slack_events):
                 else:
                     client.publish(config.get('mqtt.topic'), "+" + player_one['user']['profile']['real_name'] +
                                    "/" + player_two['user']['profile']['real_name'])
-#                    slack_client.api_call("chat.postMessage", channel=event["channel"],
-#                                          text="Added " + player_one['user']['profile']['real_name'] + " & " +
-#                                               player_two['user']['profile']['real_name'] + " to the queue.")
 
             # DEQUEUE COUPLE
             matches = re.search(DEQUE_COUPLE_REGEX, event["text"])
             if matches:
+                print("SLACK: Dequeue request from " + event["user"])
+
                 player_one = slack_client.api_call("users.info", user=matches.group(1))
                 player_two = slack_client.api_call("users.info", user=matches.group(2))
 
@@ -98,16 +133,15 @@ def handle_events(slack_events):
                 else:
                     client.publish(config.get('mqtt.topic'), "-" + player_one['user']['profile']['real_name'] +
                                    "/" + player_two['user']['profile']['real_name'])
-#                slack_client.api_call("chat.postMessage", channel=event["channel"],
-#                                      text="Added " + player_one['user']['profile']['real_name'] + " & " +
-#                                           player_two['user']['profile']['real_name'] + " to the queue.")
 
             # REQUEST QUEUE
             if event["text"] == '?q':
+                print("SLACK: List queue request from " + event["user"])
                 client.publish(config.get('mqtt.topic'), "q")
 
             # REQUEST STATISTIC
             if event["text"] == '?s':
+                print("SLACK: List statistic request from " + event["user"])
                 client.publish(config.get('mqtt.topic'), "s")
 
 
@@ -122,4 +156,4 @@ if __name__ == "__main__":
             sys.exit(" ... exiting")
 
     else:
-        print("Connection failed. Exception traceback printed above.")
+        print("Connection to SLACK failed. Exception traceback printed above.")
