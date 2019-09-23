@@ -22,7 +22,7 @@ DEQUE_COUPLE_REGEX = '^-.*<@(|[WU].+?)>.*<@(|[WU].+?)>.*'
 
 
 def on_message(client, userdata, message):
-    #print("received message =", message.payload)
+    #print("received message = '", message.payload , "'")
 
     if message.payload.startswith('++'):
         print("MQTT: Queued confirmation response.")
@@ -95,53 +95,24 @@ def handle_events(slack_events):
     for event in slack_events:
         if event["type"] == "message" and "subtype" not in event:
 
-            # QUEUE COUPLE
-            matches = re.search(QUEUE_COUPLE_REGEX, event["text"])
-            if matches:
-                print("SLACK: Queue request from " + event["user"])
-                player_one = slack_client.api_call("users.info", user=matches.group(1))
-                player_two = slack_client.api_call("users.info", user=matches.group(2))
+            real_name = slack_client.api_call("users.info", user=event["user"])['user']['profile']['real_name']
 
-                if event["user"] not in (matches.group(1), matches.group(2)):
-                    slack_client.api_call("chat.postMessage", channel=event["channel"],
-                                          text="You have to be part of the couple!")
-                elif matches.group(1) == matches.group(2):
-                    slack_client.api_call("chat.postMessage", channel=event["channel"],
-                                          text="You cannot clone yourself to build a couple!")
+            if event["text"] == '+':
+                print("SLACK: Enqueue request from " + event["user"] + " (" + real_name + ")")
+                client.publish(config.get('mqtt.topic'), "+" + real_name)
 
-                elif player_one['user']['is_bot'] or player_two['user']['is_bot']:
-                    slack_client.api_call("chat.postMessage", channel=event["channel"],
-                                          text="You cannot play with a bot, stupid!")
-                else:
-                    client.publish(config.get('mqtt.topic'), "+" + player_one['user']['profile']['real_name'] +
-                                   "/" + player_two['user']['profile']['real_name'])
-
-            # DEQUEUE COUPLE
-            matches = re.search(DEQUE_COUPLE_REGEX, event["text"])
-            if matches:
-                print("SLACK: Dequeue request from " + event["user"])
-
-                player_one = slack_client.api_call("users.info", user=matches.group(1))
-                player_two = slack_client.api_call("users.info", user=matches.group(2))
-
-                if event["user"] not in (matches.group(1), matches.group(2)):
-                    slack_client.api_call("chat.postMessage", channel=event["channel"],
-                                          text="You cannot unqueue a foreign couple!")
-                elif matches.group(1) == matches.group(2) or player_one['user']['is_bot'] or player_two['user']['is_bot']:
-                    slack_client.api_call("chat.postMessage", channel=event["channel"],
-                                          text="Never ever would have accepted that to be queued!")
-                else:
-                    client.publish(config.get('mqtt.topic'), "-" + player_one['user']['profile']['real_name'] +
-                                   "/" + player_two['user']['profile']['real_name'])
+            if event["text"] == '-':
+                print("SLACK: Dequeue request from " + event["user"] + " (" + real_name + ")")
+                client.publish(config.get('mqtt.topic'), "-" + real_name)
 
             # REQUEST QUEUE
             if event["text"] == '?q':
-                print("SLACK: List queue request from " + event["user"])
+                print("SLACK: List queue request from " + event["user"] + " (" + real_name + ")")
                 client.publish(config.get('mqtt.topic'), "q")
 
             # REQUEST STATISTIC
             if event["text"] == '?s':
-                print("SLACK: List statistic request from " + event["user"])
+                print("SLACK: List statistic request from " + event["user"] + " (" + real_name + ")")
                 client.publish(config.get('mqtt.topic'), "s")
 
 
